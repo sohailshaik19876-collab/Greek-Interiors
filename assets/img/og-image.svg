@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <rect width="1200" height="630" fill="#14110F"/>
+  <g fill="none" stroke="#C08B62" stroke-width="4.4" stroke-linecap="square" transform="translate(96 232) scale(1.35)">
+    <path d="M14 116V49.5C14 25.6 34.6 6 60 6s46 19.6 46 43.5"/>
+    <path d="M14 116h92V72H70"/>
+    <g stroke-width="2.2" opacity=".85"><path d="M27 104V52.5"/><path d="M36 104V47"/><path d="M45 104V43.5"/></g>
+  </g>
+  <text x="320" y="316" fill="#F7F3ED" font-family="Georgia, serif" font-size="86" letter-spacing="26">GREEK</text>
+  <text x="326" y="366" fill="#C08B62" font-family="Helvetica, Arial, sans-serif" font-size="22" letter-spacing="16">INTERIORS</text>
+  <line x1="326" y1="400" x2="1000" y2="400" stroke="#3A302A" stroke-width="1"/>
+  <text x="326" y="446" fill="#8E8074" font-family="Helvetica, Arial, sans-serif" font-size="20" letter-spacing="7">DESIGNING SPACES. DEFINING LIFESTYLES.</text>
+</svg>
