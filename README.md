@@ -10,14 +10,83 @@ Open `index.html` in a browser, or drop the folder on any static host (Netlify, 
 GitHub Pages, cPanel, S3).
 
 ```
-index.html                 all page content
-assets/css/style.css       design system + every section, with a numbered table of contents
-assets/js/main.js          scroll reveals, filters, slider, carousel, form, menu
-assets/img/favicon.svg     browser tab icon (bronze mark on charcoal)
-assets/img/og-image.svg    social sharing card
+index.html                     all page content
+assets/css/style.css           design system + every section, with a numbered table of contents
+assets/js/main.js              scroll reveals, filters, slider, carousel, form, menu
+assets/img/favicon.svg         browser tab icon (bronze mark on charcoal)
+assets/img/favicon-32.png      raster fallback for older browsers
+assets/img/apple-touch-icon.png  iOS home-screen icon, 180x180
+assets/img/og-image.svg        source artwork for the sharing card
+assets/img/og-image.png        social sharing card, 1200x630
+vercel.json                    headers + caching for Vercel
+robots.txt / sitemap.xml       search engine basics
 ```
 
 ---
+
+## Deploying to Vercel
+
+The site is static, so there is nothing to build.
+
+**Import from GitHub** — New Project → import this repo → pick branch
+`claude/greek-interiors-luxury-site-ux9ja0` (or merge to `main` first) → settings:
+
+| Setting | Value |
+|---|---|
+| Framework Preset | **Other** |
+| Build Command | *(leave empty)* |
+| Output Directory | *(leave empty — the repo root is served)* |
+| Install Command | *(leave empty)* |
+
+Or from the terminal:
+
+```bash
+npx vercel          # preview deployment
+npx vercel --prod   # production
+```
+
+`vercel.json` sets security headers (`nosniff`, `X-Frame-Options`, `Referrer-Policy`,
+`Permissions-Policy`, HSTS) and `Cache-Control: max-age=0, must-revalidate` on `/assets/*`.
+That last one is deliberate: the CSS and JS filenames are not content-hashed, so a long cache
+would leave visitors on a stale stylesheet after an edit. Revalidation is cheap — Vercel's CDN
+answers with a 304. If you later add version strings (`style.css?v=2`), switch it to
+`public, max-age=31536000, immutable`.
+
+HSTS is set to one year **without** `includeSubDomains` or `preload`, so it cannot affect any
+other subdomain on the same apex. Only add those once every subdomain is known to be HTTPS.
+
+### Before pointing a real domain at it
+
+The absolute URLs are placeholders — `https://www.greekinteriors.in`. Social previews, the
+canonical tag and the sitemap all break silently if they point at the wrong host, so update
+them in **five** places:
+
+1. `index.html` — `<link rel="canonical">`
+2. `index.html` — `og:url`, `og:image`, `twitter:image`
+3. `index.html` — the `url` field in the JSON-LD block
+4. `robots.txt` — the `Sitemap:` line
+5. `sitemap.xml` — the `<loc>` element
+
+```bash
+# one command, once the domain is decided
+grep -rl 'www.greekinteriors.in' . --exclude-dir=.git \
+  | xargs sed -i 's|https://www.greekinteriors.in|https://YOUR-DOMAIN.com|g'
+```
+
+Then run the page through [Facebook's sharing debugger](https://developers.facebook.com/tools/debug/)
+and [LinkedIn's post inspector](https://www.linkedin.com/post-inspector/) to prime their caches —
+both hold a stale preview for days otherwise.
+
+Also worth doing on the Vercel side: add both `example.com` and `www.example.com` and let Vercel
+redirect one to the other, so the canonical tag and the served host agree.
+
+### Social preview image
+
+`assets/img/og-image.png` (1200×630) is the sharing card — the bronze mark, wordmark and
+tagline on charcoal. It is a **PNG on purpose**: WhatsApp, Facebook and LinkedIn do not render
+SVG previews. `og-image.svg` is the source; if you edit it, re-export at 1200×630 and keep both
+in sync. Same for `apple-touch-icon.png` (180×180) and `favicon-32.png`, which are rasterised
+from `favicon.svg`.
 
 ## Design system
 

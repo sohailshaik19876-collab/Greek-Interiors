@@ -1,0 +1,7 @@
+# Greek Interiors
+# Replace the domain below with the live domain before launch.
+
+User-agent: *
+Allow: /
+
+Sitemap: https://www.greekinteriors.in/sitemap.xml
