@@ -116,16 +116,21 @@ and it propagates across the whole site.
 Everything is written as realistic studio copy, not filler — so it reads correctly if it goes
 live before you replace it. Each item below is a plain edit in `index.html`.
 
-**Contact details** (they appear in three places — contact section, footer, and the JSON-LD
-block in `<head>`):
+**Contact details.** The phone number and studio address are the real ones and appear in the
+contact section, the footer, the mobile menu, the sticky dock and the JSON-LD block:
 
-| Placeholder | Where |
+| Value | Status |
 |---|---|
-| `+91 90000 00000` | `tel:` links, `wa.me/919000000000` |
-| `studio@greekinteriors.in` | `mailto:` links |
-| `Road No. 12, Banjara Hills, Hyderabad 500034` | contact section, JSON-LD |
-| `https://www.greekinteriors.in/` | `<link rel="canonical">`, JSON-LD |
-| Instagram / Facebook / Pinterest / LinkedIn | footer `.socials`, "Follow Our Journey" |
+| `+91 97004 53895` — `tel:+919700453895`, `wa.me/919700453895` | live |
+| `1662, Krishna Nagar Colony, Aditya Nagar, Hafeezpet, Hyderabad, Telangana 500049` | live |
+| `studio@greekinteriors.in` | **placeholder** — `mailto:` links, JSON-LD |
+| `https://www.greekinteriors.in/` | **placeholder** — canonical, OG tags, JSON-LD, sitemap |
+| Instagram / Facebook / Pinterest / LinkedIn | **placeholder** — footer, "Follow Our Journey" |
+
+**Project locations are placeholders.** The eight case studies name Bengaluru, Mumbai, Goa,
+Pune, Chennai and Delhi NCR. Replace them with real completed projects before launch — the
+hero rail deliberately says only "Hyderabad, India" so the site does not imply offices the
+studio does not have.
 
 **Projects** — eight `<article class="proj">` blocks. Each carries a `data-cat`
 (`living` / `kitchens` / `bedrooms` / `villas` / `commercial`) that drives the filter buttons,
@@ -199,6 +204,14 @@ Or point the `<form>` at Formspree, Netlify Forms, or your CRM's endpoint and de
 - Scroll-linked progress line through the six-stage process timeline
 - Draggable before/after slider — mouse, touch, and keyboard (arrow keys, Home, End)
 - Auto-playing testimonial carousel that pauses on hover and supports swipe
+- Sticky contact dock (WhatsApp, call, back-to-top) anchored bottom-right. The WhatsApp link
+  carries a pre-filled message. The dock is bottom-anchored, so the back-to-top button fading
+  in above never nudges the contact buttons; the hero rail and footer credit reserve space so
+  nothing sits underneath it.
+
+**Hover on touch devices** — every hover fill is gated behind `@media (hover:hover)`, with
+`:active` and `:focus-visible` equivalents. Without this, iOS holds the `:hover` state after a
+tap and the primary button stays filled bronze until you tap elsewhere.
 
 **Accessibility** — skip link, visible focus rings, `aria` state on the menu, filters, slider
 and form, and a full `prefers-reduced-motion` path that disables every animation and parallax.
