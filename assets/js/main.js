@@ -397,21 +397,59 @@
         return;
       }
 
-      /* -----------------------------------------------------------------
-         DEMO ONLY — no backend is wired up.
-         Replace the block below with a real endpoint, e.g.:
-           fetch('/api/enquiry', { method:'POST', body:new FormData(form) })
-         or point the <form> at Formspree / Netlify Forms / your CRM.
-         ----------------------------------------------------------------- */
+      /* Posts to /api/enquiry, which stores the enquiry for the dashboard at
+         /admin. If that endpoint is unreachable the visitor is given the phone
+         number rather than a dead end — a lost lead is worse than an ugly error. */
       var btn = $('button[type="submit"]', form);
       if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
-      if (status) status.textContent = '';
+      if (status) { status.textContent = ''; status.classList.remove('is-error'); }
 
-      window.setTimeout(function () {
-        form.reset();
+      var payload = {
+        name: doc.getElementById('f-name').value,
+        phone: doc.getElementById('f-phone').value,
+        email: doc.getElementById('f-email').value,
+        projectType: doc.getElementById('f-type').value,
+        message: doc.getElementById('f-message').value,
+        company: (doc.getElementById('f-company') || {}).value || ''
+      };
+
+      function done(message, isError) {
         if (btn) { btn.disabled = false; btn.textContent = 'Send Enquiry'; }
-        if (status) status.textContent = 'Thank you — your enquiry has been received. We will be in touch within one working day.';
-      }, 900);
+        if (!status) return;
+        status.classList.toggle('is-error', Boolean(isError));
+        status.textContent = message;
+      }
+
+      fetch('/api/enquiry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          return { ok: res.ok, data: data };
+        });
+      }).then(function (result) {
+        if (result.ok) {
+          form.reset();
+          done('Thank you — your enquiry has been received. We will be in touch within one working day.', false);
+          return;
+        }
+        /* Field-level errors from the server land back on the right inputs. */
+        var fields = result.data && result.data.fields;
+        if (fields) {
+          Object.keys(fields).forEach(function (key) {
+            var input = doc.getElementById('f-' + (key === 'projectType' ? 'type' : key));
+            if (!input) return;
+            var field = input.closest('.field');
+            field.classList.add('has-error');
+            var msg = $('[data-error-for="' + input.id + '"]', field);
+            if (msg) msg.textContent = fields[key];
+          });
+        }
+        done((result.data && result.data.error) || 'Something went wrong. Please call us on +91 97004 53895.', true);
+      }).catch(function () {
+        done('We could not send that just now. Please call or WhatsApp us on +91 97004 53895.', true);
+      });
     });
   })();
 

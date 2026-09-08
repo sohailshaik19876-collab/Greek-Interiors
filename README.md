@@ -20,7 +20,106 @@ assets/img/og-image.svg        source artwork for the sharing card
 assets/img/og-image.png        social sharing card, 1200x630
 vercel.json                    headers + caching for Vercel
 robots.txt / sitemap.xml       search engine basics
+api/                           serverless endpoints (enquiries, admin session)
+admin/                         the password-protected enquiry dashboard
 ```
+
+---
+
+## Enquiry dashboard
+
+Form submissions are stored and read back at **`/admin`** — a password-protected
+dashboard with the pipeline, a weekly volume chart and CSV export.
+
+```
+api/enquiry.js            public POST endpoint behind the contact form
+api/admin/session.js      sign in / sign out
+api/admin/enquiries.js    list, update status + notes, delete
+api/_lib/store.js         storage adapter (the only file that knows Redis)
+api/_lib/auth.js          signed session cookie
+admin/                    the dashboard itself
+```
+
+Vercel deploys anything under `/api` as a Serverless Function with no build step
+and no dependencies, so the project stays framework-free.
+
+### Setting it up (about five minutes)
+
+1. **Add a database.** Vercel dashboard → your project → **Storage** → **Upstash
+   Redis** → Create. Vercel injects `KV_REST_API_URL` and `KV_REST_API_TOKEN`
+   automatically. (`UPSTASH_REDIS_REST_URL` / `_TOKEN` are also accepted — the
+   integration has used both names over time.)
+2. **Set two environment variables** under Settings → Environment Variables:
+
+   | Variable | Value |
+   |---|---|
+   | `ADMIN_PASSWORD` | the dashboard password — make it long and random |
+   | `SESSION_SECRET` | any long random string, e.g. `openssl rand -hex 32` |
+
+3. **Redeploy.** Environment variables are baked in at build time, so a redeploy
+   is required — the dashboard will keep saying it is not configured otherwise.
+4. Open `https://your-domain/admin` and sign in.
+
+Until step 1 is done the contact form answers with "please call or WhatsApp us"
+rather than pretending to have saved anything, so no lead is silently lost.
+
+### What the dashboard does
+
+- **Summary** — total, awaiting reply, last 7 days (with a change against the
+  previous 7), in conversation, won.
+- **Enquiries per week**, last 12 weeks. Hover any week for its count; *Show
+  data* opens the same numbers as a table.
+- **Pipeline**: New → Contacted → Quoted → Won / Lost. Filter by status or
+  project type, or search across name, phone, email, message and notes.
+- **Detail drawer** — the full message, one-tap call / WhatsApp / email (the
+  WhatsApp link opens with a greeting already typed), an editable status and
+  internal notes.
+- **Export CSV** of whatever is currently filtered.
+
+### Security
+
+- The password is compared in **constant time**; `===` leaks length and prefix
+  through timing.
+- The session is an **HMAC-signed cookie** — `HttpOnly`, `SameSite=Strict`,
+  `Secure` over HTTPS, eight-hour expiry. There is no session store to leak, and
+  the cookie cannot be forged without `SESSION_SECRET`.
+- **Login throttling**: eight failed attempts per IP locks sign-in for fifteen
+  minutes. If the store is unreachable the endpoint fails closed rather than
+  handing out unlimited guesses.
+- The public endpoint has a **rate limit** (six per IP per hour), a **honeypot**
+  field, length caps on every field and an allowlist for project type.
+- Enquiry text is written by strangers, so the dashboard puts it in the DOM
+  through `textContent` only — never `innerHTML`. Injected markup renders as
+  literal text.
+- CSV cells beginning `=`, `+`, `-` or `@` are prefixed with `'` so a submitted
+  formula cannot execute when the export is opened in Excel.
+- Stored IPs are **hashed**, not kept in the clear — enough to correlate spam,
+  not a retained personal identifier.
+- `/admin` and `/api/` are disallowed in `robots.txt`, and the dashboard sends
+  `noindex`.
+
+**One shared password is the right weight for a studio of this size, not for a
+larger team.** There is no per-user login and no audit trail of who changed what.
+If several people need access, move to real accounts before that matters.
+
+### Changing where enquiries are stored
+
+Everything Redis-specific lives in `api/_lib/store.js`. Reimplement its exported
+functions against Postgres, Supabase or anything else and nothing above it
+changes. Records are plain objects:
+
+```js
+{ id, submittedAt, name, phone, email, projectType, message,
+  status, notes, source, userAgent, ipHash, updatedAt }
+```
+
+### Worth adding next
+
+Nobody is notified when an enquiry arrives — someone has to open the dashboard.
+A single `fetch` to Resend, Postmark or a WhatsApp Business webhook inside
+`api/enquiry.js`, right after `saveEnquiry`, would email or message you on each
+new lead. That is the difference between a dashboard people check and one they
+forget.
 
 ---
 
@@ -176,21 +275,6 @@ Warm natural light · neutral palette · marble, wood, stone, textured plaster �
 Indian homes · restrained styling. Avoid CGI-looking renders, oversaturated images, and
 catalogue-style furniture shots. Keep one consistent grade across the whole set — it matters
 more than any single image.
-
----
-
-## Wiring up the enquiry form
-
-`#enquiryForm` validates on the client (name, phone, email, project type) and then **simulates**
-a send. There is no backend. Find the block marked `DEMO ONLY` in `assets/js/main.js` and
-replace it with a real submission, e.g.:
-
-```js
-const res = await fetch('/api/enquiry', { method: 'POST', body: new FormData(form) });
-```
-
-Or point the `<form>` at Formspree, Netlify Forms, or your CRM's endpoint and delete the
-`e.preventDefault()` path. Validation, error styling and the status message all stay as they are.
 
 ---
 

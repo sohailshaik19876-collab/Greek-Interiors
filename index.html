@@ -877,6 +877,13 @@
         <textarea id="f-message" name="message" rows="4" placeholder="Location, carpet area, timeline and anything you already have in mind."></textarea>
       </div>
 
+      <!-- Honeypot: hidden from people, irresistible to bots. A filled value is
+           accepted and silently discarded so the bot learns nothing. -->
+      <div class="hp" aria-hidden="true">
+        <label for="f-company">Company</label>
+        <input id="f-company" name="company" type="text" tabindex="-1" autocomplete="off">
+      </div>
+
       <button class="btn btn--solid btn--block" type="submit">Send Enquiry</button>
       <p class="form__status" id="formStatus" role="status" aria-live="polite"></p>
       <p class="form__fineprint">By submitting, you agree to be contacted about your enquiry. We never share your details.</p>

@@ -927,6 +927,11 @@ p{ color:var(--taupe-2); }
 .form__status{
   font-size:.78rem; letter-spacing:.1em; color:var(--bronze-2); min-height:1.2em;
 }
+.form__status.is-error{ color:#A5423A; }
+.hp{
+  position:absolute; left:-9999px; top:auto;
+  width:1px; height:1px; overflow:hidden;
+}
 .form__fineprint{ font-size:.7rem; color:var(--taupe); }
 
 /* ---------- 23. Footer ---------- */
