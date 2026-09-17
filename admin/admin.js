@@ -22,6 +22,7 @@
   var STATUS_ORDER = ['new', 'contacted', 'quoted', 'won', 'lost'];
 
   var state = {
+    storageDetail: null,
     enquiries: [],
     filtered: [],
     status: 'all',
@@ -95,10 +96,11 @@
     btn.disabled = true;
     btn.textContent = 'Signing in…';
     try {
-      await api('/api/admin/session', {
+      var session = await api('/api/admin/session', {
         method: 'POST',
         body: JSON.stringify({ password: $('#password').value })
       });
+      state.storageDetail = session.storageDetail || null;
       $('#password').value = '';
       showApp();
       await load();
@@ -120,19 +122,68 @@
   /* ------------------------------------------------------------------
      Load + render
      ------------------------------------------------------------------ */
-  function setNotice(text, isHtmlSafeLink) {
+  function setNotice(text) {
     var el = $('#notice');
-    if (!text) { el.hidden = true; el.textContent = ''; return; }
+    el.textContent = '';
+    if (!text) { el.hidden = true; return; }
     el.textContent = text;
     el.hidden = false;
-    if (isHtmlSafeLink) {
-      var a = document.createElement('a');
-      a.href = isHtmlSafeLink.href;
-      a.target = '_blank';
-      a.rel = 'noopener';
-      a.textContent = ' ' + isHtmlSafeLink.label;
-      el.appendChild(a);
+  }
+
+  /* Turns "storage is not configured" into a checklist naming the variable the
+     server actually found, so setup can be finished without guesswork. */
+  function renderStorageBanner(detail) {
+    var el = $('#notice');
+    el.textContent = '';
+
+    if (!detail || detail.configured) { el.hidden = true; return; }
+
+    var headline, steps;
+
+    if (detail.nonRestVar && !detail.urlVar) {
+      headline = 'A database is attached, but only its connection string is exposed (' +
+        detail.nonRestVar + '). This dashboard talks to Upstash over its REST API, ' +
+        'which needs two different variables.';
+      steps = [
+        'Open the database in Vercel → Storage, and copy the REST API URL and REST token.',
+        'Add them as UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.',
+        'Redeploy — environment variables are only picked up by a new deployment.'
+      ];
+    } else if (detail.urlVar && !detail.tokenVar) {
+      headline = 'Found ' + detail.urlVar + ', but no matching REST token beside it.';
+      steps = [
+        'Add the token as ' + detail.urlVar.replace(/URL$/, 'TOKEN') + '.',
+        'Redeploy afterwards.'
+      ];
+    } else if (detail.urlVar && !detail.urlIsHttp) {
+      headline = detail.urlVar + ' does not look like a REST endpoint — it must start with https://.';
+      steps = [
+        'A value beginning redis:// or rediss:// is the wrong one; the REST API URL is listed separately in Upstash.',
+        'Redeploy after correcting it.'
+      ];
+    } else {
+      headline = 'No database is connected, so enquiries are not being stored yet. ' +
+        'The contact form currently asks visitors to call or WhatsApp instead.';
+      steps = [
+        'Vercel → your project → Storage → Upstash Redis → Create.',
+        'That injects the REST URL and token automatically.',
+        'Redeploy — environment variables only take effect on a new deployment.'
+      ];
     }
+
+    var strong = document.createElement('b');
+    strong.textContent = headline;
+    el.appendChild(strong);
+
+    var ol = document.createElement('ol');
+    ol.className = 'notice__steps';
+    steps.forEach(function (t) {
+      var li = document.createElement('li');
+      li.textContent = t;
+      ol.appendChild(li);
+    });
+    el.appendChild(ol);
+    el.hidden = false;
   }
 
   async function load() {
@@ -144,8 +195,17 @@
       render();
     } catch (err) {
       if (err.status === 401) { showGate('Your session expired. Please sign in again.'); return; }
-      setNotice(err.message);
       state.enquiries = [];
+      if (err.status === 503) {
+        /* Missing storage is a setup step, not a failure — say which one. */
+        try {
+          var s = await api('/api/admin/session');
+          state.storageDetail = s.storageDetail || null;
+        } catch (e) { /* keep whatever we already had */ }
+        renderStorageBanner(state.storageDetail || { configured: false });
+      } else {
+        setNotice(err.message);
+      }
       render();
     }
   }
@@ -755,6 +815,7 @@
         $('#loginBtn').disabled = true;
         return;
       }
+      state.storageDetail = s.storageDetail || null;
       if (s.authed) { showApp(); await load(); }
       else showGate('');
     } catch (err) {

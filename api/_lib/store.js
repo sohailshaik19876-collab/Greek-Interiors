@@ -9,13 +9,86 @@
    Postgres, Supabase or anything else, reimplement these exported functions —
    nothing outside this module knows how records are stored. */
 
-const REST_URL   = process.env.KV_REST_API_URL   || process.env.UPSTASH_REDIS_REST_URL   || '';
-const REST_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
+/* Vercel names these differently depending on how the database was attached:
+   the legacy KV integration uses KV_REST_API_*, the Upstash marketplace
+   integration uses UPSTASH_REDIS_REST_*, and naming the store prefixes
+   whichever pair you get (STORAGE_KV_REST_API_URL and so on). Rather than
+   guess, look for any variable whose name ends in a known suffix and pair the
+   token to the URL it was found beside. */
+const URL_SUFFIXES = ['KV_REST_API_URL', 'UPSTASH_REDIS_REST_URL', 'REDIS_REST_URL'];
+const TOKEN_SUFFIXES = ['KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_TOKEN', 'REDIS_REST_TOKEN'];
+
+/* Connection strings that are NOT the REST API. Their presence means the
+   database is attached but the REST credentials were not exposed — a
+   different problem from "no database", and worth saying so. */
+const NON_REST_VARS = ['REDIS_URL', 'KV_URL', 'UPSTASH_REDIS_URL'];
+
+function findVar(suffixes) {
+  for (var i = 0; i < suffixes.length; i++) {
+    if (process.env[suffixes[i]]) return { name: suffixes[i], value: process.env[suffixes[i]] };
+  }
+  var keys = Object.keys(process.env);
+  for (var j = 0; j < suffixes.length; j++) {
+    for (var k = 0; k < keys.length; k++) {
+      if (keys[k].endsWith('_' + suffixes[j]) && process.env[keys[k]]) {
+        return { name: keys[k], value: process.env[keys[k]] };
+      }
+    }
+  }
+  return null;
+}
+
+function resolveCredentials() {
+  var url = findVar(URL_SUFFIXES);
+  if (!url) return { url: null, token: findVar(TOKEN_SUFFIXES) };
+
+  /* Prefer the token sitting on the same prefix as the URL we matched. */
+  var token = null;
+  for (var i = 0; i < URL_SUFFIXES.length; i++) {
+    if (!url.name.endsWith(URL_SUFFIXES[i])) continue;
+    var prefix = url.name.slice(0, url.name.length - URL_SUFFIXES[i].length);
+    for (var j = 0; j < TOKEN_SUFFIXES.length; j++) {
+      var candidate = prefix + TOKEN_SUFFIXES[j];
+      if (process.env[candidate]) { token = { name: candidate, value: process.env[candidate] }; break; }
+    }
+    if (token) break;
+  }
+  return { url: url, token: token || findVar(TOKEN_SUFFIXES) };
+}
+
+const CREDS = resolveCredentials();
+const REST_URL = CREDS.url ? String(CREDS.url.value).trim().replace(/\/+$/, '') : '';
+const REST_TOKEN = CREDS.token ? String(CREDS.token.value).trim() : '';
+const URL_IS_HTTP = /^https?:\/\//i.test(REST_URL);
+
+function nonRestVarPresent() {
+  var keys = Object.keys(process.env);
+  for (var i = 0; i < NON_REST_VARS.length; i++) {
+    for (var j = 0; j < keys.length; j++) {
+      if ((keys[j] === NON_REST_VARS[i] || keys[j].endsWith('_' + NON_REST_VARS[i])) && process.env[keys[j]]) {
+        return keys[j];
+      }
+    }
+  }
+  return null;
+}
+
+/* Variable NAMES and booleans only — never a value. Safe to hand to the
+   dashboard so setup can be diagnosed without reading Vercel's settings. */
+function describe() {
+  return {
+    configured: isConfigured(),
+    urlVar: CREDS.url ? CREDS.url.name : null,
+    tokenVar: CREDS.token ? CREDS.token.name : null,
+    urlIsHttp: URL_IS_HTTP,
+    nonRestVar: nonRestVarPresent()
+  };
+}
 
 const INDEX = 'enq:index';           // sorted set, score = submitted-at ms
 const KEY   = function (id) { return 'enq:' + id; };
 
-function isConfigured() { return Boolean(REST_URL && REST_TOKEN); }
+function isConfigured() { return Boolean(REST_URL && REST_TOKEN && URL_IS_HTTP); }
 
 /* Run one or more Redis commands. Upstash answers a pipeline with an array of
    {result} / {error} objects in the same order. */
@@ -23,9 +96,10 @@ async function pipeline(commands) {
   if (!isConfigured()) {
     var err = new Error('Storage is not configured');
     err.code = 'NO_STORE';
+    err.detail = describe();
     throw err;
   }
-  var res = await fetch(REST_URL.replace(/\/+$/, '') + '/pipeline', {
+  var res = await fetch(REST_URL + '/pipeline', {
     method: 'POST',
     headers: {
       Authorization: 'Bearer ' + REST_TOKEN,
@@ -115,6 +189,7 @@ async function clearKey(key) { await one(['DEL', key]); }
 
 module.exports = {
   isConfigured: isConfigured,
+  describe: describe,
   saveEnquiry: saveEnquiry,
   listEnquiries: listEnquiries,
   getEnquiry: getEnquiry,

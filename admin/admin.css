@@ -150,6 +150,11 @@ select{ cursor:pointer; }
   font-size:.88rem;
 }
 .notice a{ color:var(--bronze-3); }
+.notice b{ font-weight:500; display:block; }
+.notice__steps{
+  margin:.7rem 0 0; padding-left:1.25rem; display:grid; gap:.3rem;
+  font-size:.84rem; color:var(--text-2); list-style:decimal;
+}
 
 /* ---------- summary ---------- */
 .summary{

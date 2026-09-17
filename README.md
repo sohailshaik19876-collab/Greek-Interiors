@@ -61,7 +61,34 @@ and no dependencies, so the project stays framework-free.
 4. Open `https://your-domain/admin` and sign in.
 
 Until step 1 is done the contact form answers with "please call or WhatsApp us"
-rather than pretending to have saved anything, so no lead is silently lost.
+rather than pretending to have saved anything, so no lead is silently lost. You
+can still sign in to `/admin` — it shows an empty dashboard with a banner naming
+exactly which variable is missing and what to do about it.
+
+### If it still says storage is not configured
+
+The banner on the dashboard names the specific cause. The three that actually
+happen:
+
+| What you see | Cause | Fix |
+|---|---|---|
+| "No database is connected" | no matching variable found | attach the database (step 1 above) |
+| "only its connection string is exposed (REDIS_URL)" | the integration exposed `redis://` credentials, not the REST pair | copy the REST API URL and token from Upstash and add them as `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` |
+| nothing changed after adding the variables | environment variables are read at build time | **redeploy** |
+
+Variable names are matched by suffix, so prefixed variants created when you name
+a store — `STORAGE_KV_REST_API_URL`, `MYDB_UPSTASH_REDIS_REST_URL` — are picked
+up automatically, and the token is paired to the prefix its URL was found on.
+Accepted suffixes:
+
+```
+URL:   KV_REST_API_URL | UPSTASH_REDIS_REST_URL | REDIS_REST_URL
+TOKEN: KV_REST_API_TOKEN | UPSTASH_REDIS_REST_TOKEN | REDIS_REST_TOKEN
+```
+
+A value beginning `redis://` or `rediss://` in the URL slot is rejected rather
+than used — it is the wrong credential, and the dashboard says so instead of
+failing with a network error.
 
 ### What the dashboard does
 
@@ -84,8 +111,12 @@ rather than pretending to have saved anything, so no lead is silently lost.
   `Secure` over HTTPS, eight-hour expiry. There is no session store to leak, and
   the cookie cannot be forged without `SESSION_SECRET`.
 - **Login throttling**: eight failed attempts per IP locks sign-in for fifteen
-  minutes. If the store is unreachable the endpoint fails closed rather than
-  handing out unlimited guesses.
+  minutes. If the shared store is unreachable it falls back to an in-memory
+  counter with a lower ceiling of five, so a missing database cannot lock the
+  owner out of their own dashboard. That fallback only counts attempts within
+  one warm serverless instance, which is weaker than the Redis counter — the
+  trade is deliberate, and with no store there are no enquiries behind the
+  login to reach anyway. Use a long random password regardless.
 - The public endpoint has a **rate limit** (six per IP per hour), a **honeypot**
   field, length caps on every field and an allowlist for project type.
 - Enquiry text is written by strangers, so the dashboard puts it in the DOM

@@ -13,13 +13,36 @@ const { send, fail, readJson, clientIp } = require('../_lib/http');
 const MAX_ATTEMPTS = 8;
 const LOCK_WINDOW = 15 * 60;
 
+/* Fallback throttle for when the shared store is unavailable. It only counts
+   attempts within one warm serverless instance, so it is weaker than the Redis
+   counter — hence the lower ceiling. Being locked out of your own dashboard
+   because the database is missing is worse than this, and with no store there
+   are no enquiries behind the login to reach anyway. */
+const MEMORY_MAX_ATTEMPTS = 5;
+var memoryHits = new Map();
+
+function memoryBump(key, windowSeconds) {
+  var now = Date.now();
+  var entry = memoryHits.get(key);
+  if (!entry || entry.expires < now) entry = { count: 0, expires: now + windowSeconds * 1000 };
+  entry.count++;
+  memoryHits.set(key, entry);
+  if (memoryHits.size > 500) {
+    memoryHits.forEach(function (v, k) { if (v.expires < now) memoryHits.delete(k); });
+  }
+  return entry.count;
+}
+
 module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     return send(res, 200, {
       ok: true,
       authed: auth.isConfigured() && auth.isAuthed(req),
       configured: auth.isConfigured(),
-      storage: store.isConfigured()
+      storage: store.isConfigured(),
+      /* Variable names and booleans only, no values — enough for the dashboard
+         to say precisely what is missing instead of "not configured". */
+      storageDetail: store.describe()
     });
   }
 
@@ -41,20 +64,22 @@ module.exports = async function handler(req, res) {
 
   var throttleKey = 'rl:login:' + clientIp(req);
 
-  /* Throttling needs the store. If it is unavailable, fail closed rather than
-     silently handing out unlimited password guesses. */
+  /* Throttling prefers the shared store, but a missing or unreachable database
+     must not lock the owner out of the dashboard — fall back to the in-memory
+     counter and keep sign-in working. */
   var attempts;
+  var ceiling = MAX_ATTEMPTS;
   try {
     attempts = await store.bump(throttleKey, LOCK_WINDOW);
   } catch (err) {
-    if (err && err.code === 'NO_STORE') {
-      return fail(res, 503, 'Storage is not configured, so sign-in is disabled. Connect an Upstash Redis database in Vercel.');
+    if (!err || err.code !== 'NO_STORE') {
+      console.error('login throttle fell back to memory:', err && err.message);
     }
-    console.error('login throttle failed:', err && err.message);
-    return fail(res, 502, 'Could not sign you in just now. Please try again.');
+    attempts = memoryBump(throttleKey, LOCK_WINDOW);
+    ceiling = MEMORY_MAX_ATTEMPTS;
   }
 
-  if (attempts > MAX_ATTEMPTS) {
+  if (attempts > ceiling) {
     return fail(res, 429, 'Too many attempts. Please wait fifteen minutes and try again.');
   }
 
@@ -64,5 +89,10 @@ module.exports = async function handler(req, res) {
 
   try { await store.clearKey(throttleKey); } catch (e) { /* non-fatal */ }
 
-  return send(res, 200, { ok: true, authed: true }, { 'Set-Cookie': auth.loginCookie(req) });
+  return send(res, 200, {
+    ok: true,
+    authed: true,
+    storage: store.isConfigured(),
+    storageDetail: store.describe()
+  }, { 'Set-Cookie': auth.loginCookie(req) });
 };
